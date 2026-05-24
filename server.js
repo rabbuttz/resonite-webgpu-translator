@@ -76,6 +76,18 @@ function sendJson(res, status, obj) {
   res.end(body);
 }
 
+function sendFile(res, filePath, ext) {
+  fs.stat(filePath, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404); res.end("not found"); return; }
+    res.writeHead(200, {
+      "content-type": MIME[ext] ?? "application/octet-stream",
+      "content-length": st.size,
+      "cache-control": "no-cache",
+    });
+    fs.createReadStream(filePath).pipe(res);
+  });
+}
+
 function serveStatic(req, res) {
   const url = new URL(req.url, "http://localhost");
   let rel = decodeURIComponent(url.pathname);
@@ -85,14 +97,17 @@ function serveStatic(req, res) {
     res.writeHead(403); res.end("forbidden"); return;
   }
   fs.stat(filePath, (err, st) => {
-    if (err || !st.isFile()) { res.writeHead(404); res.end("not found"); return; }
-    const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, {
-      "content-type": MIME[ext] ?? "application/octet-stream",
-      "content-length": st.size,
-      "cache-control": "no-cache",
-    });
-    fs.createReadStream(filePath).pipe(res);
+    if (!err && st.isFile()) {
+      const ext = path.extname(filePath).toLowerCase();
+      sendFile(res, filePath, ext);
+      return;
+    }
+    // SPA-ish fallback: paths without a file extension (e.g. "/alice", "/foo/bar")
+    // serve index.html so the page can read location.pathname as the username.
+    if (path.extname(rel)) {
+      res.writeHead(404); res.end("not found"); return;
+    }
+    sendFile(res, path.join(PUBLIC_DIR, "index.html"), ".html");
   });
 }
 

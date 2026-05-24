@@ -23,6 +23,13 @@ const ui = {
 
 const getDirection = () => document.querySelector('input[name="dir"]:checked').value;
 
+(function prefillUserFromURL() {
+  const qUser = new URLSearchParams(location.search).get("user");
+  if (qUser) { ui.targetUser.value = qUser; return; }
+  const path = decodeURIComponent(location.pathname).replace(/^\/+|\/+$/g, "");
+  if (path && path !== "index.html") ui.targetUser.value = path;
+})();
+
 let translator = null;
 let recognition = null;
 let recognizing = false;
@@ -79,6 +86,8 @@ async function translateText(text, direction) {
     max_new_tokens: 256,
     do_sample: false,
     temperature: 0,
+    repetition_penalty: 1.15,
+    no_repeat_ngram_size: 3,
     return_full_text: false,
   });
   return extractText(out);
@@ -168,6 +177,12 @@ async function runWorker() {
   }
 }
 
+let restartCount = 0;
+let lastEndAt = 0;
+let consecutiveFastFails = 0;
+let gotResultSinceStart = false;
+let restartTimer = null;
+
 function buildRecognition() {
   const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Ctor) {
@@ -180,16 +195,62 @@ function buildRecognition() {
   r.interimResults = true;
   r.lang = getDirection() === "ja2en" ? "ja-JP" : "en-US";
 
-  r.onstart = () => { recognizing = true; ui.recStat.textContent = `認識中 (${r.lang})`; };
-  r.onerror = (e) => { ui.recStat.textContent = "エラー: " + e.error; };
-  r.onend = () => {
-    recognizing = false;
-    ui.recStat.textContent = "停止";
-    if (wantRunning) {
-      setTimeout(() => { try { r.start(); } catch {} }, 250);
+  r.onstart = () => {
+    recognizing = true;
+    gotResultSinceStart = false;
+    ui.recStat.textContent = `認識中 (${r.lang}, restarts=${restartCount})`;
+    console.log("[recognition] start", r.lang);
+  };
+
+  r.onerror = (e) => {
+    console.warn("[recognition] error", e.error);
+    ui.recStat.textContent = "エラー: " + e.error;
+    if (e.error === "not-allowed" || e.error === "audio-capture" || e.error === "service-not-allowed") {
+      wantRunning = false;
+      ui.start.disabled = false;
+      ui.stop.disabled  = true;
     }
   };
+
+  r.onend = () => {
+    recognizing = false;
+    const now = Date.now();
+    const sinceLast = now - lastEndAt;
+    lastEndAt = now;
+
+    if (gotResultSinceStart || sinceLast > 1500) {
+      consecutiveFastFails = 0;
+    } else {
+      consecutiveFastFails++;
+    }
+    console.log(`[recognition] end (sinceLastEnd=${sinceLast}ms, gotResult=${gotResultSinceStart}, fastFails=${consecutiveFastFails})`);
+
+    if (!wantRunning) {
+      ui.recStat.textContent = "停止";
+      return;
+    }
+
+    const delay = consecutiveFastFails === 0
+      ? 250
+      : Math.min(500 * Math.pow(2, consecutiveFastFails - 1), 5000);
+    ui.recStat.textContent = consecutiveFastFails > 0
+      ? `再起動中 (${delay}ms 待機, fails=${consecutiveFastFails})`
+      : `再起動中 (restarts=${restartCount + 1})`;
+
+    if (restartTimer) clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      if (!wantRunning || recognizing) return;
+      restartCount++;
+      recognition = buildRecognition();
+      if (!recognition) return;
+      try { recognition.start(); }
+      catch (err) { console.error("[recognition] start failed", err); }
+    }, delay);
+  };
+
   r.onresult = (ev) => {
+    gotResultSinceStart = true;
     const live = ui.liveMode.checked;
     const direction = getDirection();
     const last = ev.results[ev.results.length - 1];
@@ -208,10 +269,12 @@ function buildRecognition() {
 function setRunning(on) {
   wantRunning = on;
   if (on) {
+    restartCount = 0;
     if (!recognition) recognition = buildRecognition();
     if (!recognition) return;
     recognition.lang = getDirection() === "ja2en" ? "ja-JP" : "en-US";
-    try { recognition.start(); } catch {}
+    try { recognition.start(); }
+    catch (e) { console.warn("initial start failed", e); }
     ui.start.disabled = true;
     ui.stop.disabled = false;
   } else {
@@ -222,6 +285,7 @@ function setRunning(on) {
     ui.stop.disabled = true;
   }
 }
+
 
 async function refreshUsers() {
   try {
@@ -243,7 +307,12 @@ ui.stop.addEventListener("click",  () => setRunning(false));
 ui.refresh.addEventListener("click", refreshUsers);
 document.querySelectorAll('input[name="dir"]').forEach((el) => {
   el.addEventListener("change", () => {
-    if (recognition) recognition.lang = getDirection() === "ja2en" ? "ja-JP" : "en-US";
+    if (!recognition) return;
+    recognition.lang = getDirection() === "ja2en" ? "ja-JP" : "en-US";
+    if (recognizing) {
+      console.log("[recognition] direction changed, restarting to apply lang");
+      try { recognition.stop(); } catch {}
+    }
   });
 });
 
