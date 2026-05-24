@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Resonite Translator (JP&lt;-&gt;EN)</title>
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<main>
+  <h1>Resonite Translator</h1>
+  <p class="sub">Web Speech API + LFM2-350M-ENJP-MT (WebGPU) — <a href="./viewer.html">受信テストページ →</a></p>
+
+  <section class="controls">
+    <label>送信先 Resonite ユーザー名
+      <input id="target-user" list="user-list" placeholder="例: alice" autocomplete="off" />
+      <datalist id="user-list"></datalist>
+    </label>
+
+    <fieldset>
+      <legend>翻訳方向</legend>
+      <label><input type="radio" name="dir" value="ja2en" checked /> JA → EN</label>
+      <label><input type="radio" name="dir" value="en2ja" /> EN → JA</label>
+    </fieldset>
+
+    <label>
+      <input type="checkbox" id="live-mode" checked />
+      リアルタイム翻訳 (interim も逐次翻訳して送る)
+    </label>
+
+    <div class="buttons">
+      <button id="start" disabled>Start</button>
+      <button id="stop" disabled>Stop</button>
+      <button id="refresh-users" type="button">接続中ユーザー再取得</button>
+    </div>
+  </section>
+
+  <section class="status">
+    <div>モデル: <span id="model-status">未ロード</span></div>
+    <div>認識: <span id="rec-status">停止</span></div>
+    <div>最終配信: <span id="publish-status">-</span></div>
+  </section>
+
+  <section class="log">
+    <h2>ライブ</h2>
+    <div class="row">
+      <div class="label">途中 (interim)</div>
+      <div id="interim" class="value muted"></div>
+    </div>
+    <div class="row">
+      <div class="label">原文</div>
+      <div id="original" class="value"></div>
+    </div>
+    <div class="row">
+      <div class="label">訳文</div>
+      <div id="translated" class="value"></div>
+    </div>
+
+    <h2>履歴</h2>
+    <ol id="history"></ol>
+  </section>
+</main>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

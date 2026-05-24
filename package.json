@@ -1,0 +1,16 @@
+{
+  "name": "resonite-translator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based JP<->EN speech translator that relays results to Resonite via WebSocket per username.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

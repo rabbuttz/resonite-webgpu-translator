@@ -1,0 +1,37 @@
+:root {
+  color-scheme: light dark;
+  --fg: #111;
+  --muted: #777;
+  --bg: #fafafa;
+  --card: #fff;
+  --accent: #2b6cb0;
+  --border: #ddd;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --fg:#eee; --muted:#999; --bg:#161616; --card:#222; --accent:#7ab7ff; --border:#333; }
+}
+* { box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; background: var(--bg); color: var(--fg); }
+main { max-width: 760px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+h1 { margin: 0 0 .2rem; }
+.sub { color: var(--muted); margin: 0 0 1.5rem; font-size: .9rem; }
+section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+.controls label { display: block; margin-bottom: .8rem; }
+.controls input[type=text], .controls input:not([type]) { width: 100%; padding: .4rem .6rem; font-size: 1rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+fieldset { border: 1px solid var(--border); border-radius: 6px; padding: .4rem .8rem; margin: 0 0 .8rem; }
+fieldset label { display: inline-block; margin-right: 1rem; }
+.buttons { display: flex; gap: .5rem; flex-wrap: wrap; }
+button { padding: .5rem 1rem; font-size: 1rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg); cursor: pointer; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button#start:enabled { background: var(--accent); color: white; border-color: var(--accent); }
+.status { font-size: .9rem; }
+.status > div { margin-bottom: .25rem; }
+.log .row { display: grid; grid-template-columns: 8em 1fr; gap: .5rem; margin-bottom: .4rem; }
+.log .label { color: var(--muted); font-size: .85rem; }
+.log .value { word-break: break-word; }
+.log .value.muted { color: var(--muted); }
+.log h2 { font-size: 1rem; margin: 1rem 0 .4rem; }
+#history { padding-left: 1.2rem; max-height: 360px; overflow: auto; }
+#history li { margin-bottom: .4rem; font-size: .9rem; }
+#history li .o { color: var(--muted); }
+#history li .t { font-weight: 500; }
