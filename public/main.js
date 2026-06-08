@@ -21,6 +21,106 @@ const ui = {
   history:    $("history"),
 };
 
+const LANGUAGE = (() => {
+  const primary = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase();
+  return primary.startsWith("ja") ? "ja" : "en";
+})();
+const DEFAULT_DIRECTION = LANGUAGE === "ja" ? "ja2en" : "en2ja";
+
+const TEXT = {
+  ja: {
+    documentTitle: "Resonite Translator (JP<->EN)",
+    subtitle: "Web Speech API + LFM2-350M-ENJP-MT (WebGPU)",
+    viewerLink: "受信テストページ →",
+    targetUserLabel: "送信先 Resonite ユーザー名",
+    targetUserPlaceholder: "例: alice",
+    directionLegend: "翻訳方向",
+    liveModeLabel: "リアルタイム翻訳テスト機能 (interim も逐次翻訳して送る)",
+    refreshUsers: "接続中ユーザー再取得",
+    modelLabel: "モデル",
+    recognitionLabel: "認識",
+    publishLabel: "最終配信",
+    modelInitial: "未ロード",
+    recStopped: "停止",
+    liveTitle: "ライブ",
+    interimLabel: "途中 (interim)",
+    originalLabel: "原文",
+    translatedLabel: "訳文",
+    historyTitle: "履歴",
+    modelLoading: "ロード中...",
+    modelLoadingFile: "ロード中 {file} {pct}%",
+    modelReady: "Ready ({device} / {dtype})",
+    modelLoadFailed: "ロード失敗: {message}",
+    userMissing: "ユーザー名未入力",
+    publishStatus: "{time}  delivered={delivered}",
+    publishFailed: "送信失敗 {status}",
+    publishError: "送信エラー: {message}",
+    recognitionUnsupported: "未対応 (Chrome を使ってください)",
+    recognitionRunning: "認識中 ({lang}, restarts={count})",
+    recognitionError: "エラー: {message}",
+    recognitionRestartWait: "再起動中 ({delay}ms 待機, fails={count})",
+    recognitionRestarting: "再起動中 (restarts={count})",
+    webgpuUnsupported: "WebGPU 非対応のブラウザです (Chrome 推奨)",
+  },
+  en: {
+    documentTitle: "Resonite Translator (EN<->JP)",
+    subtitle: "Web Speech API + LFM2-350M-ENJP-MT (WebGPU)",
+    viewerLink: "Receiver test page →",
+    targetUserLabel: "Target Resonite username",
+    targetUserPlaceholder: "e.g. alice",
+    directionLegend: "Translation direction",
+    liveModeLabel: "Experimental real-time translation (also translates and sends interim results)",
+    refreshUsers: "Refresh connected users",
+    modelLabel: "Model",
+    recognitionLabel: "Recognition",
+    publishLabel: "Last publish",
+    modelInitial: "Not loaded",
+    recStopped: "Stopped",
+    liveTitle: "Live",
+    interimLabel: "Interim",
+    originalLabel: "Original",
+    translatedLabel: "Translation",
+    historyTitle: "History",
+    modelLoading: "Loading...",
+    modelLoadingFile: "Loading {file} {pct}%",
+    modelReady: "Ready ({device} / {dtype})",
+    modelLoadFailed: "Load failed: {message}",
+    userMissing: "Username is required",
+    publishStatus: "{time}  delivered={delivered}",
+    publishFailed: "Publish failed {status}",
+    publishError: "Publish error: {message}",
+    recognitionUnsupported: "Not supported (use Chrome)",
+    recognitionRunning: "Recognizing ({lang}, restarts={count})",
+    recognitionError: "Error: {message}",
+    recognitionRestartWait: "Restarting ({delay}ms wait, fails={count})",
+    recognitionRestarting: "Restarting (restarts={count})",
+    webgpuUnsupported: "This browser does not support WebGPU (Chrome recommended)",
+  },
+};
+
+function t(key, vars = {}) {
+  let text = TEXT[LANGUAGE][key] ?? TEXT.en[key] ?? key;
+  for (const [name, value] of Object.entries(vars)) {
+    text = text.replaceAll(`{${name}}`, String(value));
+  }
+  return text;
+}
+
+function applyLocale() {
+  document.documentElement.lang = LANGUAGE;
+  document.title = t("documentTitle");
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  const radio = document.querySelector(`input[name="dir"][value="${DEFAULT_DIRECTION}"]`);
+  if (radio) radio.checked = true;
+}
+
+applyLocale();
+
 const getDirection = () => document.querySelector('input[name="dir"]:checked').value;
 
 (function prefillUserFromURL() {
@@ -39,11 +139,11 @@ let workerRunning = false;
 let lastTranslatedText = "";
 
 async function loadModel() {
-  ui.modelStat.textContent = "ロード中...";
+  ui.modelStat.textContent = t("modelLoading");
   const onProgress = (p) => {
     if (p?.status === "progress" && p.file) {
       const pct = p.total ? Math.round((p.loaded / p.total) * 100) : 0;
-      ui.modelStat.textContent = `ロード中 ${p.file} ${pct}%`;
+      ui.modelStat.textContent = t("modelLoadingFile", { file: p.file, pct });
     } else if (p?.status) {
       ui.modelStat.textContent = `${p.status}${p.file ? " " + p.file : ""}`;
     }
@@ -61,7 +161,7 @@ async function loadModel() {
         ...v,
         progress_callback: onProgress,
       });
-      ui.modelStat.textContent = `Ready (${v.device} / ${v.dtype})`;
+      ui.modelStat.textContent = t("modelReady", v);
       lastErr = null;
       break;
     } catch (e) {
@@ -70,7 +170,7 @@ async function loadModel() {
     }
   }
   if (lastErr) {
-    ui.modelStat.textContent = "ロード失敗: " + (lastErr.message ?? lastErr);
+    ui.modelStat.textContent = t("modelLoadFailed", { message: lastErr.message ?? lastErr });
     throw lastErr;
   }
   ui.start.disabled = false;
@@ -108,18 +208,21 @@ function extractText(out) {
 
 async function publish(payload) {
   const user = ui.targetUser.value.trim();
-  if (!user) { ui.pubStat.textContent = "ユーザー名未入力"; return; }
+  if (!user) { ui.pubStat.textContent = t("userMissing"); return; }
   try {
     const r = await fetch("/publish?user=" + encodeURIComponent(user), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!r.ok) { ui.pubStat.textContent = "送信失敗 " + r.status; return; }
+    if (!r.ok) { ui.pubStat.textContent = t("publishFailed", { status: r.status }); return; }
     const j = await r.json();
-    ui.pubStat.textContent = `${new Date().toLocaleTimeString()}  delivered=${j.delivered}`;
+    ui.pubStat.textContent = t("publishStatus", {
+      time: new Date().toLocaleTimeString(),
+      delivered: j.delivered,
+    });
   } catch (e) {
-    ui.pubStat.textContent = "送信エラー: " + (e.message ?? e);
+    ui.pubStat.textContent = t("publishError", { message: e.message ?? e });
   }
 }
 
@@ -186,7 +289,7 @@ let restartTimer = null;
 function buildRecognition() {
   const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Ctor) {
-    ui.recStat.textContent = "未対応 (Chrome を使ってください)";
+    ui.recStat.textContent = t("recognitionUnsupported");
     ui.start.disabled = true;
     return null;
   }
@@ -198,13 +301,13 @@ function buildRecognition() {
   r.onstart = () => {
     recognizing = true;
     gotResultSinceStart = false;
-    ui.recStat.textContent = `認識中 (${r.lang}, restarts=${restartCount})`;
+    ui.recStat.textContent = t("recognitionRunning", { lang: r.lang, count: restartCount });
     console.log("[recognition] start", r.lang);
   };
 
   r.onerror = (e) => {
     console.warn("[recognition] error", e.error);
-    ui.recStat.textContent = "エラー: " + e.error;
+    ui.recStat.textContent = t("recognitionError", { message: e.error });
     if (e.error === "not-allowed" || e.error === "audio-capture" || e.error === "service-not-allowed") {
       wantRunning = false;
       ui.start.disabled = false;
@@ -226,7 +329,7 @@ function buildRecognition() {
     console.log(`[recognition] end (sinceLastEnd=${sinceLast}ms, gotResult=${gotResultSinceStart}, fastFails=${consecutiveFastFails})`);
 
     if (!wantRunning) {
-      ui.recStat.textContent = "停止";
+      ui.recStat.textContent = t("recStopped");
       return;
     }
 
@@ -234,8 +337,8 @@ function buildRecognition() {
       ? 250
       : Math.min(500 * Math.pow(2, consecutiveFastFails - 1), 5000);
     ui.recStat.textContent = consecutiveFastFails > 0
-      ? `再起動中 (${delay}ms 待機, fails=${consecutiveFastFails})`
-      : `再起動中 (restarts=${restartCount + 1})`;
+      ? t("recognitionRestartWait", { delay, count: consecutiveFastFails })
+      : t("recognitionRestarting", { count: restartCount + 1 });
 
     if (restartTimer) clearTimeout(restartTimer);
     restartTimer = setTimeout(() => {
@@ -320,7 +423,7 @@ refreshUsers();
 setInterval(refreshUsers, 5000);
 
 if (!("gpu" in navigator)) {
-  ui.modelStat.textContent = "WebGPU 非対応のブラウザです (Chrome 推奨)";
+  ui.modelStat.textContent = t("webgpuUnsupported");
 } else {
   loadModel().catch(() => {});
 }

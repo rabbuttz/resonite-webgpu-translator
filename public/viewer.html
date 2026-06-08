@@ -8,35 +8,35 @@
 </head>
 <body>
 <main>
-  <h1>Viewer (Resonite側の代わり)</h1>
-  <p class="sub">指定ユーザー名の WebSocket チャンネルを購読して、受信メッセージを表示します。</p>
+  <h1 data-i18n="title">Viewer (Resonite側の代わり)</h1>
+  <p class="sub" data-i18n="subtitle">指定ユーザー名の WebSocket チャンネルを購読して、受信メッセージを表示します。</p>
 
   <section class="controls">
-    <label>受信するユーザー名
-      <input id="user" placeholder="例: alice" autocomplete="off" />
+    <label><span data-i18n="userLabel">受信するユーザー名</span>
+      <input id="user" placeholder="例: alice" data-i18n-placeholder="userPlaceholder" autocomplete="off" />
     </label>
     <div class="buttons">
       <button id="connect">Connect</button>
       <button id="disconnect" disabled>Disconnect</button>
-      <button id="clear" type="button">クリア</button>
+      <button id="clear" type="button" data-i18n="clear">クリア</button>
     </div>
   </section>
 
   <section class="status">
-    <div>接続: <span id="conn">未接続</span></div>
-    <div>受信件数: <span id="count">0</span></div>
+    <div><span data-i18n="connectionLabel">接続</span>: <span id="conn" data-i18n="disconnected">未接続</span></div>
+    <div><span data-i18n="countLabel">受信件数</span>: <span id="count">0</span></div>
   </section>
 
   <section class="log">
-    <h2>受信ログ</h2>
+    <h2 data-i18n="logTitle">受信ログ</h2>
     <div class="row">
-      <div class="label">最新 訳文</div>
+      <div class="label" data-i18n="latestLabel">最新 訳文</div>
       <div id="latest" class="value"></div>
     </div>
     <ol id="history"></ol>
   </section>
 
-  <p class="sub"><a href="./">← 認識・送信ページへ</a></p>
+  <p class="sub"><a href="./" data-i18n="senderLink">← 認識・送信ページへ</a></p>
 </main>
 <script type="module" src="./viewer.js"></script>
 </body>

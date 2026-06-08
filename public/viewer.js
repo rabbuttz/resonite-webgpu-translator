@@ -10,6 +10,73 @@ const ui = {
   history:    $("history"),
 };
 
+const LANGUAGE = (() => {
+  const primary = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase();
+  return primary.startsWith("ja") ? "ja" : "en";
+})();
+
+const TEXT = {
+  ja: {
+    documentTitle: "Resonite Translator — 受信テスト",
+    title: "Viewer (Resonite側の代わり)",
+    subtitle: "指定ユーザー名の WebSocket チャンネルを購読して、受信メッセージを表示します。",
+    userLabel: "受信するユーザー名",
+    userPlaceholder: "例: alice",
+    clear: "クリア",
+    connectionLabel: "接続",
+    disconnected: "未接続",
+    countLabel: "受信件数",
+    logTitle: "受信ログ",
+    latestLabel: "最新 訳文",
+    senderLink: "← 認識・送信ページへ",
+    userMissing: "ユーザー名を入力してください",
+    connecting: "接続中... ({url})",
+    open: "OPEN (user={user})",
+    closed: "CLOSED (code={code})",
+    error: "ERROR",
+  },
+  en: {
+    documentTitle: "Resonite Translator — Receiver test",
+    title: "Viewer (Resonite receiver test)",
+    subtitle: "Subscribe to a WebSocket channel by username and show received messages.",
+    userLabel: "Username to receive",
+    userPlaceholder: "e.g. alice",
+    clear: "Clear",
+    connectionLabel: "Connection",
+    disconnected: "Disconnected",
+    countLabel: "Received",
+    logTitle: "Receive log",
+    latestLabel: "Latest translation",
+    senderLink: "← Recognition and sender page",
+    userMissing: "Enter a username",
+    connecting: "Connecting... ({url})",
+    open: "OPEN (user={user})",
+    closed: "CLOSED (code={code})",
+    error: "ERROR",
+  },
+};
+
+function t(key, vars = {}) {
+  let text = TEXT[LANGUAGE][key] ?? TEXT.en[key] ?? key;
+  for (const [name, value] of Object.entries(vars)) {
+    text = text.replaceAll(`{${name}}`, String(value));
+  }
+  return text;
+}
+
+function applyLocale() {
+  document.documentElement.lang = LANGUAGE;
+  document.title = t("documentTitle");
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+}
+
+applyLocale();
+
 let ws = null;
 let received = 0;
 
@@ -50,14 +117,14 @@ function append(raw) {
 
 function connect() {
   const user = ui.user.value.trim();
-  if (!user) { setState("ユーザー名を入力してください"); return; }
+  if (!user) { setState(t("userMissing")); return; }
   if (ws) try { ws.close(); } catch {}
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const url = `${proto}//${location.host}/${encodeURIComponent(user)}`;
-  setState(`接続中... (${url})`);
+  setState(t("connecting", { url }));
   ws = new WebSocket(url);
   ws.addEventListener("open", () => {
-    setState(`OPEN (user=${user})`);
+    setState(t("open", { user }));
     ui.connect.disabled = true;
     ui.disconnect.disabled = false;
   });
@@ -65,12 +132,12 @@ function connect() {
     append(typeof ev.data === "string" ? ev.data : "");
   });
   ws.addEventListener("close", (ev) => {
-    setState(`CLOSED (code=${ev.code})`);
+    setState(t("closed", { code: ev.code }));
     ui.connect.disabled = false;
     ui.disconnect.disabled = true;
   });
   ws.addEventListener("error", () => {
-    setState("ERROR");
+    setState(t("error"));
   });
 }
 

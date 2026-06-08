@@ -9,54 +9,54 @@
 <body>
 <main>
   <h1>Resonite Translator</h1>
-  <p class="sub">Web Speech API + LFM2-350M-ENJP-MT (WebGPU) — <a href="./viewer.html">受信テストページ →</a></p>
+  <p class="sub"><span data-i18n="subtitle">Web Speech API + LFM2-350M-ENJP-MT (WebGPU)</span> — <a href="./viewer.html" data-i18n="viewerLink">受信テストページ →</a></p>
 
   <section class="controls">
-    <label>送信先 Resonite ユーザー名
-      <input id="target-user" list="user-list" placeholder="例: alice" autocomplete="off" />
+    <label><span data-i18n="targetUserLabel">送信先 Resonite ユーザー名</span>
+      <input id="target-user" list="user-list" placeholder="例: alice" data-i18n-placeholder="targetUserPlaceholder" autocomplete="off" />
       <datalist id="user-list"></datalist>
     </label>
 
     <fieldset>
-      <legend>翻訳方向</legend>
+      <legend data-i18n="directionLegend">翻訳方向</legend>
       <label><input type="radio" name="dir" value="ja2en" checked /> JA → EN</label>
       <label><input type="radio" name="dir" value="en2ja" /> EN → JA</label>
     </fieldset>
 
     <label>
       <input type="checkbox" id="live-mode" />
-      リアルタイム翻訳テスト機能 (interim も逐次翻訳して送る)
+      <span data-i18n="liveModeLabel">リアルタイム翻訳テスト機能 (interim も逐次翻訳して送る)</span>
     </label>
 
     <div class="buttons">
       <button id="start" disabled>Start</button>
       <button id="stop" disabled>Stop</button>
-      <button id="refresh-users" type="button">接続中ユーザー再取得</button>
+      <button id="refresh-users" type="button" data-i18n="refreshUsers">接続中ユーザー再取得</button>
     </div>
   </section>
 
   <section class="status">
-    <div>モデル: <span id="model-status">未ロード</span></div>
-    <div>認識: <span id="rec-status">停止</span></div>
-    <div>最終配信: <span id="publish-status">-</span></div>
+    <div><span data-i18n="modelLabel">モデル</span>: <span id="model-status" data-i18n="modelInitial">未ロード</span></div>
+    <div><span data-i18n="recognitionLabel">認識</span>: <span id="rec-status" data-i18n="recStopped">停止</span></div>
+    <div><span data-i18n="publishLabel">最終配信</span>: <span id="publish-status">-</span></div>
   </section>
 
   <section class="log">
-    <h2>ライブ</h2>
+    <h2 data-i18n="liveTitle">ライブ</h2>
     <div class="row">
-      <div class="label">途中 (interim)</div>
+      <div class="label" data-i18n="interimLabel">途中 (interim)</div>
       <div id="interim" class="value muted"></div>
     </div>
     <div class="row">
-      <div class="label">原文</div>
+      <div class="label" data-i18n="originalLabel">原文</div>
       <div id="original" class="value"></div>
     </div>
     <div class="row">
-      <div class="label">訳文</div>
+      <div class="label" data-i18n="translatedLabel">訳文</div>
       <div id="translated" class="value"></div>
     </div>
 
-    <h2>履歴</h2>
+    <h2 data-i18n="historyTitle">履歴</h2>
     <ol id="history"></ol>
   </section>
 </main>
