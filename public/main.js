@@ -224,8 +224,8 @@ function buildTranslationMessages(text, direction) {
     : `Translate this ${source} text into ${target}:\n${text}`;
 
   return [
-    { role: "system", content: [{ type: "text", text: instructions }] },
-    { role: "user", content: [{ type: "text", text: userText }] },
+    { role: "system", content: instructions },
+    { role: "user", content: userText },
   ];
 }
 
