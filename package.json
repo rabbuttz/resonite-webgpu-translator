@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Browser-based JP<->EN speech translator that relays results to Resonite via WebSocket per username.",
+  "description": "Browser-based JP<->EN speech translator using Gemma 4 E2B on WebGPU and relaying results to Resonite via WebSocket per username.",
   "scripts": {
     "start": "node server.js"
   },

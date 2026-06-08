@@ -1,8 +1,7 @@
-import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0/dist/transformers.min.js";
-
-env.allowLocalModels = false;
-
-const MODEL_ID = "onnx-community/LFM2-350M-ENJP-MT-ONNX";
+import {
+  AutoProcessor,
+  Gemma4ForConditionalGeneration,
+} from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0/dist/transformers.min.js";
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -22,6 +21,13 @@ const ui = {
   history:    $("history"),
 };
 
+const params = new URLSearchParams(location.search);
+const MODEL_ID = params.get("model") || "onnx-community/gemma-4-E2B-it-ONNX";
+const requestedContextLimit = Number(params.get("context") || 5);
+const CONTEXT_LIMIT = Number.isFinite(requestedContextLimit)
+  ? Math.max(0, Math.min(10, requestedContextLimit))
+  : 5;
+
 const LANGUAGE = (() => {
   const primary = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase();
   return primary.startsWith("ja") ? "ja" : "en";
@@ -31,7 +37,7 @@ const DEFAULT_DIRECTION = LANGUAGE === "ja" ? "ja2en" : "en2ja";
 const TEXT = {
   ja: {
     documentTitle: "Resonite Translator (JP<->EN)",
-    subtitle: "Web Speech API + LFM2-350M-ENJP-MT (WebGPU)",
+    subtitle: "Web Speech API + Gemma 4 E2B (WebGPU)",
     viewerLink: "受信テストページ →",
     targetUserLabel: "送信先 Resonite ユーザー名",
     targetUserPlaceholder: "例: alice",
@@ -51,8 +57,9 @@ const TEXT = {
     historyTitle: "履歴",
     modelLoading: "ロード中...",
     modelLoadingFile: "ロード中 {file} {pct}%",
-    modelReady: "Ready ({device} / {dtype})",
+    modelReady: "Ready ({model} / WebGPU / context={context})",
     modelLoadFailed: "ロード失敗: {message}",
+    translateFailed: "翻訳失敗: {message}",
     userMissing: "ユーザー名未入力",
     publishStatus: "{time}  delivered={delivered}",
     publishFailed: "送信失敗 {status}",
@@ -67,7 +74,7 @@ const TEXT = {
   },
   en: {
     documentTitle: "Resonite Translator (EN<->JP)",
-    subtitle: "Web Speech API + LFM2-350M-ENJP-MT (WebGPU)",
+    subtitle: "Web Speech API + Gemma 4 E2B (WebGPU)",
     viewerLink: "Receiver test page →",
     targetUserLabel: "Target Resonite username",
     targetUserPlaceholder: "e.g. alice",
@@ -87,8 +94,9 @@ const TEXT = {
     historyTitle: "History",
     modelLoading: "Loading...",
     modelLoadingFile: "Loading {file} {pct}%",
-    modelReady: "Ready ({device} / {dtype})",
+    modelReady: "Ready ({model} / WebGPU / context={context})",
     modelLoadFailed: "Load failed: {message}",
+    translateFailed: "Translation failed: {message}",
     userMissing: "Username is required",
     publishStatus: "{time}  delivered={delivered}",
     publishFailed: "Publish failed {status}",
@@ -126,7 +134,6 @@ function applyLocale() {
 
 applyLocale();
 
-const params = new URLSearchParams(location.search);
 const DEFAULT_RELAY_BASE =
   location.protocol === "file:" || location.hostname.endsWith("github.io")
     ? "http://localhost:8080"
@@ -153,13 +160,19 @@ const getDirection = () => document.querySelector('input[name="dir"]:checked').v
   if (path && path !== "index.html") ui.targetUser.value = path;
 })();
 
-let translator = null;
 let recognition = null;
 let recognizing = false;
 let wantRunning = false;
 let pendingJob = null;
 let workerRunning = false;
 let lastTranslatedText = "";
+let contextHistory = [];
+let processor = null;
+let model = null;
+
+function recentContext() {
+  return CONTEXT_LIMIT === 0 ? [] : contextHistory.slice(-CONTEXT_LIMIT);
+}
 
 async function loadModel() {
   ui.modelStat.textContent = t("modelLoading");
@@ -171,62 +184,83 @@ async function loadModel() {
       ui.modelStat.textContent = `${p.status}${p.file ? " " + p.file : ""}`;
     }
   };
-  const variants = [
-    { device: "webgpu", dtype: "q4" },
-    { device: "webgpu", dtype: "fp16" },
-    { device: "webgpu", dtype: "q8" },
-    { device: "wasm",   dtype: "q4" },
+
+  try {
+    processor = await AutoProcessor.from_pretrained(MODEL_ID, {
+      progress_callback: onProgress,
+    });
+    model = await Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {
+      dtype: "q4f16",
+      device: "webgpu",
+      progress_callback: onProgress,
+    });
+    ui.modelStat.textContent = t("modelReady", { model: MODEL_ID, context: CONTEXT_LIMIT });
+    ui.start.disabled = false;
+  } catch (e) {
+    ui.modelStat.textContent = t("modelLoadFailed", { message: e.message ?? e });
+    throw e;
+  }
+}
+
+function buildTranslationMessages(text, direction) {
+  const target = direction === "ja2en" ? "English" : "Japanese";
+  const source = direction === "ja2en" ? "Japanese" : "English";
+  const recent = recentContext()
+    .map((item, i) => {
+      const itemDirection = item.direction === "en2ja" ? "English to Japanese" : "Japanese to English";
+      return `${i + 1}. Direction: ${itemDirection}\nSource: ${item.original}\nTranslation: ${item.translated}`;
+    })
+    .join("\n\n");
+
+  const instructions = [
+    `You are a live ${source}-to-${target} speech translator for VR subtitles.`,
+    `Translate only into ${target}.`,
+    "Use the recent context to preserve names, pronouns, terminology, and topic continuity.",
+    "Return only the translated text. Do not explain, label, romanize, quote, or add alternatives.",
+  ].join("\n");
+
+  const userText = recent
+    ? `Recent context, oldest to newest:\n${recent}\n\nTranslate this ${source} text into ${target}:\n${text}`
+    : `Translate this ${source} text into ${target}:\n${text}`;
+
+  return [
+    { role: "system", content: [{ type: "text", text: instructions }] },
+    { role: "user", content: [{ type: "text", text: userText }] },
   ];
-  let lastErr = null;
-  for (const v of variants) {
-    try {
-      translator = await pipeline("text-generation", MODEL_ID, {
-        ...v,
-        progress_callback: onProgress,
-      });
-      ui.modelStat.textContent = t("modelReady", v);
-      lastErr = null;
-      break;
-    } catch (e) {
-      console.warn(`load failed (${v.device}/${v.dtype}):`, e);
-      lastErr = e;
-    }
+}
+
+function cleanTranslation(text) {
+  return String(text || "")
+    .trim()
+    .replace(/^["'「『]+|["'」』]+$/g, "")
+    .trim();
+}
+
+async function encodePrompt(prompt) {
+  try {
+    return await processor(prompt, null, null, { add_special_tokens: false });
+  } catch {
+    return await processor(prompt, { add_special_tokens: false });
   }
-  if (lastErr) {
-    ui.modelStat.textContent = t("modelLoadFailed", { message: lastErr.message ?? lastErr });
-    throw lastErr;
-  }
-  ui.start.disabled = false;
 }
 
 async function translateText(text, direction) {
-  const systemPrompt = direction === "ja2en" ? "Translate to English." : "Translate to Japanese.";
-  const messages = [
-    { role: "system", content: systemPrompt },
-    { role: "user",   content: text },
-  ];
-  const out = await translator(messages, {
+  if (!processor || !model) throw new Error("model not loaded");
+  const messages = buildTranslationMessages(text, direction);
+  const prompt = processor.apply_chat_template(messages, {
+    enable_thinking: false,
+    add_generation_prompt: true,
+  });
+  const inputs = await encodePrompt(prompt);
+  const output = await model.generate({
+    ...inputs,
     max_new_tokens: 256,
     do_sample: false,
-    temperature: 0,
-    repetition_penalty: 1.15,
-    no_repeat_ngram_size: 3,
-    return_full_text: false,
   });
-  return extractText(out);
-}
-
-function extractText(out) {
-  if (!out) return "";
-  const first = Array.isArray(out) ? out[0] : out;
-  if (typeof first === "string") return first.trim();
-  const g = first?.generated_text;
-  if (typeof g === "string") return g.trim();
-  if (Array.isArray(g)) {
-    const last = g[g.length - 1];
-    return (last?.content ?? "").trim();
-  }
-  return (first?.text ?? "").trim();
+  const inputLength = inputs.input_ids.dims.at(-1);
+  const generated = output.slice(null, [inputLength, null]);
+  const decoded = processor.batch_decode(generated, { skip_special_tokens: true });
+  return cleanTranslation(decoded[0]);
 }
 
 async function publish(payload) {
@@ -280,16 +314,26 @@ async function runWorker() {
       ui.original.textContent = job.text;
       ui.translated.textContent = "...";
       let translated = "";
+      let translatedOk = false;
       try {
         translated = await translateText(job.text, job.direction);
+        translatedOk = true;
       } catch (e) {
-        translated = "[error] " + (e.message ?? e);
+        translated = "[error] " + t("translateFailed", { message: e.message ?? e });
       }
       lastTranslatedText = job.text;
       ui.translated.textContent = translated;
 
       if (job.isFinal) {
         appendHistory(job.text, translated, job.direction);
+        if (translatedOk) {
+          contextHistory.push({
+            original: job.text,
+            translated,
+            direction: job.direction,
+          });
+          contextHistory = recentContext();
+        }
         lastTranslatedText = "";
       }
 
@@ -449,6 +493,8 @@ setInterval(refreshUsers, 5000);
 
 if (!("gpu" in navigator)) {
   ui.modelStat.textContent = t("webgpuUnsupported");
+} else if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
+  ui.recStat.textContent = t("recognitionUnsupported");
 } else {
   loadModel().catch(() => {});
 }
