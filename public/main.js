@@ -12,6 +12,7 @@ const ui = {
   stop:       $("stop"),
   refresh:    $("refresh-users"),
   liveMode:   $("live-mode"),
+  relayStat:  $("relay-status"),
   modelStat:  $("model-status"),
   recStat:    $("rec-status"),
   pubStat:    $("publish-status"),
@@ -37,6 +38,7 @@ const TEXT = {
     directionLegend: "翻訳方向",
     liveModeLabel: "リアルタイム翻訳テスト機能 (interim も逐次翻訳して送る)",
     refreshUsers: "接続中ユーザー再取得",
+    relayLabel: "中継",
     modelLabel: "モデル",
     recognitionLabel: "認識",
     publishLabel: "最終配信",
@@ -61,6 +63,7 @@ const TEXT = {
     recognitionRestartWait: "再起動中 ({delay}ms 待機, fails={count})",
     recognitionRestarting: "再起動中 (restarts={count})",
     webgpuUnsupported: "WebGPU 非対応のブラウザです (Chrome 推奨)",
+    relaySameOrigin: "同一オリジン",
   },
   en: {
     documentTitle: "Resonite Translator (EN<->JP)",
@@ -71,6 +74,7 @@ const TEXT = {
     directionLegend: "Translation direction",
     liveModeLabel: "Experimental real-time translation (also translates and sends interim results)",
     refreshUsers: "Refresh connected users",
+    relayLabel: "Relay",
     modelLabel: "Model",
     recognitionLabel: "Recognition",
     publishLabel: "Last publish",
@@ -95,6 +99,7 @@ const TEXT = {
     recognitionRestartWait: "Restarting ({delay}ms wait, fails={count})",
     recognitionRestarting: "Restarting (restarts={count})",
     webgpuUnsupported: "This browser does not support WebGPU (Chrome recommended)",
+    relaySameOrigin: "same origin",
   },
 };
 
@@ -121,10 +126,28 @@ function applyLocale() {
 
 applyLocale();
 
+const params = new URLSearchParams(location.search);
+const DEFAULT_RELAY_BASE =
+  location.protocol === "file:" || location.hostname.endsWith("github.io")
+    ? "http://localhost:8080"
+    : location.origin;
+
+function normalizeRelayBase(value) {
+  return value.replace(/\/+$/, "");
+}
+
+const RELAY_BASE = normalizeRelayBase(params.get("relay") || DEFAULT_RELAY_BASE);
+
+function relayUrl(path) {
+  return new URL(path, RELAY_BASE);
+}
+
+ui.relayStat.textContent = RELAY_BASE === location.origin ? t("relaySameOrigin") : RELAY_BASE;
+
 const getDirection = () => document.querySelector('input[name="dir"]:checked').value;
 
 (function prefillUserFromURL() {
-  const qUser = new URLSearchParams(location.search).get("user");
+  const qUser = params.get("user");
   if (qUser) { ui.targetUser.value = qUser; return; }
   const path = decodeURIComponent(location.pathname).replace(/^\/+|\/+$/g, "");
   if (path && path !== "index.html") ui.targetUser.value = path;
@@ -210,7 +233,9 @@ async function publish(payload) {
   const user = ui.targetUser.value.trim();
   if (!user) { ui.pubStat.textContent = t("userMissing"); return; }
   try {
-    const r = await fetch("/publish?user=" + encodeURIComponent(user), {
+    const url = relayUrl("/publish");
+    url.searchParams.set("user", user);
+    const r = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
@@ -392,7 +417,7 @@ function setRunning(on) {
 
 async function refreshUsers() {
   try {
-    const r = await fetch("/users");
+    const r = await fetch(relayUrl("/users"));
     const list = await r.json();
     ui.userList.innerHTML = "";
     for (const u of list) {

@@ -24,6 +24,14 @@ npm start            # http://localhost:8080
 
 `PORT=9000 npm start` でポート変更。
 
+## GitHub Pages 版
+
+GitHub Pages では静的 UI だけを公開します。Resonite へ配信する WebSocket 中継は Node サーバーが必要なので、この PC で `npm start` も起動してください。
+
+- Pages URL: `https://rabbuttz.github.io/resonite-webgpu-translator/`
+- Pages からの既定中継先: `http://localhost:8080`
+- 中継先を変える場合: `?relay=http://localhost:9000` のように指定
+
 ## ブラウザ側
 
 1. `http://localhost:8080` を **Chrome** で開く（WebGPU が要る）

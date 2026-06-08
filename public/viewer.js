@@ -4,6 +4,7 @@ const ui = {
   connect:    $("connect"),
   disconnect: $("disconnect"),
   clear:      $("clear"),
+  relay:      $("relay"),
   conn:       $("conn"),
   count:      $("count"),
   latest:     $("latest"),
@@ -23,6 +24,7 @@ const TEXT = {
     userLabel: "受信するユーザー名",
     userPlaceholder: "例: alice",
     clear: "クリア",
+    relayLabel: "中継",
     connectionLabel: "接続",
     disconnected: "未接続",
     countLabel: "受信件数",
@@ -34,6 +36,7 @@ const TEXT = {
     open: "OPEN (user={user})",
     closed: "CLOSED (code={code})",
     error: "ERROR",
+    relaySameOrigin: "同一オリジン",
   },
   en: {
     documentTitle: "Resonite Translator — Receiver test",
@@ -42,6 +45,7 @@ const TEXT = {
     userLabel: "Username to receive",
     userPlaceholder: "e.g. alice",
     clear: "Clear",
+    relayLabel: "Relay",
     connectionLabel: "Connection",
     disconnected: "Disconnected",
     countLabel: "Received",
@@ -53,6 +57,7 @@ const TEXT = {
     open: "OPEN (user={user})",
     closed: "CLOSED (code={code})",
     error: "ERROR",
+    relaySameOrigin: "same origin",
   },
 };
 
@@ -81,6 +86,25 @@ let ws = null;
 let received = 0;
 
 const params = new URLSearchParams(location.search);
+const DEFAULT_RELAY_BASE =
+  location.protocol === "file:" || location.hostname.endsWith("github.io")
+    ? "http://localhost:8080"
+    : location.origin;
+
+function normalizeRelayBase(value) {
+  return value.replace(/\/+$/, "");
+}
+
+const RELAY_BASE = normalizeRelayBase(params.get("relay") || DEFAULT_RELAY_BASE);
+
+function relayWsUrl(user) {
+  const relay = new URL(RELAY_BASE);
+  const proto = relay.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${relay.host}/${encodeURIComponent(user)}`;
+}
+
+ui.relay.textContent = RELAY_BASE === location.origin ? t("relaySameOrigin") : RELAY_BASE;
+
 if (params.get("user")) ui.user.value = params.get("user");
 
 function setState(s) {
@@ -119,8 +143,7 @@ function connect() {
   const user = ui.user.value.trim();
   if (!user) { setState(t("userMissing")); return; }
   if (ws) try { ws.close(); } catch {}
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${proto}//${location.host}/${encodeURIComponent(user)}`;
+  const url = relayWsUrl(user);
   setState(t("connecting", { url }));
   ws = new WebSocket(url);
   ws.addEventListener("open", () => {

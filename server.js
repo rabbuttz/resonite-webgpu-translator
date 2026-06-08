@@ -19,6 +19,22 @@ const MIME = {
 
 const channels = new Map();
 
+function corsHeaders(req) {
+  const origin = req.headers.origin;
+  if (!origin) return {};
+  const allowed =
+    origin === "null" ||
+    origin === "https://rabbuttz.github.io" ||
+    /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  if (!allowed) return {};
+  return {
+    "access-control-allow-origin": origin,
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "content-type",
+    "vary": "Origin",
+  };
+}
+
 function addClient(user, ws) {
   let set = channels.get(user);
   if (!set) {
@@ -66,9 +82,10 @@ function readBody(req, limit = 64 * 1024) {
   });
 }
 
-function sendJson(res, status, obj) {
+function sendJson(req, res, status, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(status, {
+    ...corsHeaders(req),
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
@@ -114,26 +131,32 @@ function serveStatic(req, res) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
 
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, corsHeaders(req));
+    res.end();
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/users") {
-    sendJson(res, 200, [...channels.keys()].sort());
+    sendJson(req, res, 200, [...channels.keys()].sort());
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/publish") {
     const user = url.searchParams.get("user");
-    if (!user) { sendJson(res, 400, { error: "user required" }); return; }
+    if (!user) { sendJson(req, res, 400, { error: "user required" }); return; }
     try {
       const raw = await readBody(req);
       let data;
       try { data = JSON.parse(raw); }
-      catch { sendJson(res, 400, { error: "invalid json" }); return; }
+      catch { sendJson(req, res, 400, { error: "invalid json" }); return; }
       const original   = typeof data.original   === "string" ? data.original   : "";
       const translated = typeof data.translated === "string" ? data.translated : "";
       const text = `${original}\n${translated}`;
       const delivered = broadcast(user, text);
-      sendJson(res, 200, { delivered });
+      sendJson(req, res, 200, { delivered });
     } catch (e) {
-      sendJson(res, 400, { error: String(e.message ?? e) });
+      sendJson(req, res, 400, { error: String(e.message ?? e) });
     }
     return;
   }
